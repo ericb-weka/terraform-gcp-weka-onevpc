@@ -31,11 +31,11 @@ variable "mtu_size" {
 
 variable "vpcs_name" {
   type        = list(string)
-  description = "Names of VPC networks to associate with the resource. Depending on your configuration, you can specify 0, 4, or 7 VPC networks."
+  description = "Single-VPC mode: provide 0 (auto-create) or 1 existing VPC name."
   default     = []
   validation {
-    condition     = length(var.vpcs_name) == 0 || length(var.vpcs_name) == 4 || length(var.vpcs_name) == 7
-    error_message = "The provided list of VPC networks is invalid. You can specify 0, 4, or 7 VPC networks."
+    condition     = length(var.vpcs_name) == 0 || length(var.vpcs_name) == 1
+    error_message = "Single-VPC mode: provide 0 (auto-create) or 1 VPC name."
   }
 }
 
@@ -113,22 +113,14 @@ variable "cluster_size" {
 
 variable "subnets_range" {
   type        = list(string)
-  description = "List of subnet CIDRs (0, 4, or 7) for cluster creation. 0: No subnets (for single-node testing). 4: Common setup for production (spread across AZs for redundancy). 7: Less common deployments with specific needs."
+  description = "List of subnet CIDRs to create in the single VPC (one per NIC)."
   default     = ["10.0.0.0/24", "10.1.0.0/24", "10.2.0.0/24", "10.3.0.0/24"]
-  validation {
-    condition     = length(var.subnets_range) == 0 || length(var.subnets_range) == 4 || length(var.subnets_range) == 7
-    error_message = "Invalid number of subnets. Valid options: 0, 4, or 7."
-  }
 }
 
 variable "subnets_name" {
   type        = list(string)
-  description = "List of names (0, 4, or 7) for subnets defined in the subnets_range variable."
+  description = "List of existing subnet names (one per NIC, all in the same VPC)."
   default     = []
-  validation {
-    condition     = length(var.subnets_name) == 0 || length(var.subnets_name) == 4 || length(var.subnets_name) == 7
-    error_message = "Invalid number of subnet names. Set according to subnets_range."
-  }
 }
 
 variable "vpc_connector_range" {

@@ -1,24 +1,17 @@
 locals {
-  vpcs_number = var.vpc_number > 0 ? var.vpc_number : length(var.subnets) > 0 ? length(var.subnets) : length(var.subnets_range)
-  temp = flatten([
-    for from in range(local.vpcs_number) : [
-      for to in range(local.vpcs_number) : {
-        from = from
-        to   = to
-      }
-    ]
-  ])
-  peering_list              = [for t in local.temp : t if t["from"] != t["to"]]
-  network_project_id        = var.network_project_id != "" ? var.network_project_id : var.project_id
-  project_id_list           = concat([var.project_id], [var.network_project_id])
-  network_self_link         = length(var.vpcs) == 0 ? google_compute_network.vpc_network.*.self_link : data.google_compute_network.vpc_list_ids.*.self_link
-  vpcs_name                 = length(var.vpcs) == 0 ? google_compute_network.vpc_network.*.name : var.vpcs
+  # Single-VPC mode: always 1 VPC, N subnets
+  vpcs_number            = 1
+  subnets_number         = length(var.subnets) > 0 ? length(var.subnets) : length(var.subnets_range)
+  network_project_id     = var.network_project_id != "" ? var.network_project_id : var.project_id
+  project_id_list        = concat([var.project_id], [var.network_project_id])
+  network_self_link      = length(var.vpcs) == 0 ? [google_compute_network.vpc_network[0].self_link] : [data.google_compute_network.vpc_list_ids[0].self_link]
+  vpcs_name              = length(var.vpcs) == 0 ? [google_compute_network.vpc_network[0].name] : var.vpcs
   deployment_project_number = data.google_project.project.number
   vpc_custom_rule_combinations = flatten([
     for rule in var.sg_custom_ingress_rules : [
-      for vpc_name in local.vpcs_name : {
+      {
         rule     = rule
-        vpc_name = vpc_name
+        vpc_name = local.vpcs_name[0]
       }
     ]
   ])
@@ -66,9 +59,9 @@ resource "google_project_service" "service_cloud_api" {
 }
 
 resource "google_compute_network" "vpc_network" {
-  count                           = length(var.vpcs) == 0 ? local.vpcs_number : 0
+  count                           = length(var.vpcs) == 0 ? 1 : 0
   project                         = local.network_project_id
-  name                            = "${var.prefix}-vpc-${count.index}"
+  name                            = "${var.prefix}-vpc"
   auto_create_subnetworks         = false
   mtu                             = var.mtu_size
   routing_mode                    = "REGIONAL"
@@ -77,13 +70,14 @@ resource "google_compute_network" "vpc_network" {
 }
 
 # ======================= subnet ==========================
+# Single-VPC: all subnets created in the same VPC
 resource "google_compute_subnetwork" "subnetwork" {
-  count                    = length(var.subnets) == 0 && length(var.subnets_range) > 0 ? local.vpcs_number : 0
+  count                    = length(var.subnets) == 0 && length(var.subnets_range) > 0 ? length(var.subnets_range) : 0
   project                  = local.network_project_id
   name                     = "${var.prefix}-subnet-${count.index}"
   ip_cidr_range            = var.subnets_range[count.index]
   region                   = var.region
-  network                  = local.vpcs_name[count.index]
+  network                  = local.vpcs_name[0]
   private_ip_google_access = true
   depends_on               = [google_compute_network.vpc_network]
 }
@@ -100,13 +94,7 @@ resource "google_compute_subnetwork" "psc_subnetwork" {
   depends_on               = [google_compute_network.vpc_network]
 }
 
-resource "google_compute_network_peering" "peering" {
-  count        = length(var.vpcs) == 0 && var.set_peering ? length(local.peering_list) : 0
-  name         = "${var.prefix}-peering-${local.peering_list[count.index]["from"]}-${local.peering_list[count.index]["to"]}"
-  network      = length(var.vpcs) == 0 ? google_compute_network.vpc_network[local.peering_list[count.index]["from"]].self_link : data.google_compute_network.vpc_list_ids[local.peering_list[count.index]["from"]].self_link
-  peer_network = length(var.vpcs) == 0 ? google_compute_network.vpc_network[local.peering_list[count.index]["to"]].self_link : data.google_compute_network.vpc_list_ids[local.peering_list[count.index]["to"]].self_link
-  depends_on   = [google_compute_subnetwork.subnetwork]
-}
+# VPC peering removed: not needed in single-VPC mode
 
 # ========================= nat ===============================
 resource "google_compute_router" "router" {
@@ -137,10 +125,10 @@ resource "google_compute_router_nat" "nat" {
 
 # ========================= sg =================================
 resource "google_compute_firewall" "sg_ssh" {
-  count         = length(var.allow_ssh_cidrs) == 0 ? 0 : local.vpcs_number
+  count         = length(var.allow_ssh_cidrs) == 0 ? 0 : 1
   project       = local.network_project_id
-  name          = "${var.prefix}-sg-ssh-${count.index}"
-  network       = local.vpcs_name[count.index]
+  name          = "${var.prefix}-sg-ssh"
+  network       = local.vpcs_name[0]
   source_ranges = var.allow_ssh_cidrs
   allow {
     protocol = "tcp"
@@ -150,10 +138,10 @@ resource "google_compute_firewall" "sg_ssh" {
 }
 
 resource "google_compute_firewall" "sg_weka_api" {
-  count         = length(var.allow_weka_api_cidrs) == 0 ? 0 : local.vpcs_number
+  count         = length(var.allow_weka_api_cidrs) == 0 ? 0 : 1
   project       = local.network_project_id
-  name          = "${var.prefix}-sg-weka-api-${count.index}"
-  network       = local.vpcs_name[count.index]
+  name          = "${var.prefix}-sg-weka-api"
+  network       = local.vpcs_name[0]
   source_ranges = var.allow_weka_api_cidrs
   allow {
     protocol = "tcp"
@@ -178,10 +166,10 @@ resource "google_compute_firewall" "sg_custom_ingress_rules" {
 }
 
 resource "google_compute_firewall" "sg_private" {
-  count         = length(var.subnets) == 0 ? length(var.subnets_range) : length(var.subnets)
-  name          = "${var.prefix}-sg-all-${count.index}"
+  count         = local.subnets_number > 0 ? 1 : 0
+  name          = "${var.prefix}-sg-all"
   project       = local.network_project_id
-  network       = local.vpcs_name[count.index]
+  network       = local.vpcs_name[0]
   source_ranges = length(var.subnets) == 0 ? var.subnets_range : data.google_compute_subnetwork.subnets_list_ids.*.ip_cidr_range
   allow {
     protocol = "all"
@@ -206,7 +194,7 @@ resource "google_compute_subnetwork" "connector_subnet" {
   ip_cidr_range            = var.vpc_connector_range
   region                   = lookup(var.vpc_connector_region_map, var.region, var.region)
   private_ip_google_access = true
-  network                  = local.vpcs_name[count.index]
+  network                  = local.vpcs_name[0]
   depends_on               = [google_compute_network.vpc_network]
 }
 

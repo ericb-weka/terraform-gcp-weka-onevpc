@@ -10,32 +10,24 @@ variable "region" {
 
 variable "vpcs" {
   type        = list(string)
-  description = "List of vpcs name"
+  description = "Single-VPC mode: provide 0 (auto-create) or 1 existing VPC name."
   default     = []
   validation {
-    condition     = length(var.vpcs) == 0 || length(var.vpcs) == 4 || length(var.vpcs) == 7
-    error_message = "The allowed amount of vpcs are 0, 4 and 7"
+    condition     = length(var.vpcs) == 0 || length(var.vpcs) == 1
+    error_message = "Single-VPC mode: provide 0 (auto-create) or 1 VPC name."
   }
 }
 
 variable "subnets_range" {
   type        = list(string)
-  description = "list of subnets to use for creating the cluster, the number of subnets must be 'vpcs_number'"
+  description = "List of subnet CIDRs to create in the single VPC (one per NIC)."
   default     = []
-  validation {
-    condition     = length(var.subnets_range) == 0 || length(var.subnets_range) == 4 || length(var.subnets_range) == 7
-    error_message = "The allowed amount of subnet ranges are 0, 4 and 7"
-  }
 }
 
 variable "subnets" {
   type        = list(string)
-  description = "List of subnets name"
+  description = "List of existing subnet names (one per NIC, all in the same VPC)."
   default     = []
-  validation {
-    condition     = length(var.subnets) == 0 || length(var.subnets) == 4 || length(var.subnets) == 7
-    error_message = "The allowed amount of subnets are 0, 4 and 7"
-  }
 }
 
 variable "psc_subnet_cidr" {
