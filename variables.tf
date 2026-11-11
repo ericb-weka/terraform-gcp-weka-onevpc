@@ -487,6 +487,13 @@ variable "containers_config_map" {
       frontend = 1
       nics     = 10
       memory   = ["384GB", "384GB"]
+    },
+    z4d-highmem-48-highlssd = {
+      compute  = 5
+      drive    = 3
+      frontend = 1
+      nics     = 10
+      memory   = ["315GB", "315.3GB"]
     }
   }
   validation {

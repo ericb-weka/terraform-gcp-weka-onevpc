@@ -91,8 +91,16 @@ locals {
       nic_type             = "GVNIC"
       host_maintenance     = "MIGRATE"
     }
-    # z4m does not support pd-* disks; hyperdisk-balanced is required, and it cannot live-migrate
+    # z4m and z4d do not support pd-* disks; hyperdisk-balanced is required, and they cannot live-migrate
     "z4m-highmem" = {
+      nvmes_number         = 0
+      allow_nvmes_override = false
+      boot_disk_type       = "hyperdisk-balanced"
+      data_disk_type       = "hyperdisk-balanced"
+      nic_type             = "GVNIC"
+      host_maintenance     = "TERMINATE"
+    }
+    "z4d-highmem" = {
       nvmes_number         = 0
       allow_nvmes_override = false
       boot_disk_type       = "hyperdisk-balanced"
